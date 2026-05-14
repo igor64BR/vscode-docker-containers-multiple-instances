@@ -1,0 +1,86 @@
+# Roda 3 instâncias paralelas de code-server (VS Code no navegador), cada uma com:
+#   - Volume isolado (clone independente do repositório)
+#   - Branch própria (BRANCH_1, BRANCH_2, BRANCH_3 no .env)
+#   - Acesso compartilhado às credenciais SSH (~/.ssh do host, read-only)
+#   - Acesso compartilhado ao login do Claude Code (~/.claude do host, leitura/escrita)
+#
+# Portas:
+#   vscode-1 → http://localhost:8080
+#   vscode-2 → http://localhost:8081
+#   vscode-3 → http://localhost:8082
+
+x-vscode-base: &vscode-base
+  image: ubuntu:24.04
+  working_dir: /workspace
+  command: ["bash", "/init.sh"]
+  restart: unless-stopped
+
+x-vscode-env: &vscode-env
+  PASSWORD: ${PASSWORD:-troqueessasenha}
+  GIT_USER_NAME: ${GIT_USER_NAME:-Seu Nome}
+  GIT_USER_EMAIL: ${GIT_USER_EMAIL:-voce@email.com}
+  REPO_URL: ${REPO_URL}
+  DEBIAN_FRONTEND: noninteractive
+
+services:
+  vscode-1:
+    <<: *vscode-base
+    container_name: vscode-dev-1
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *vscode-env
+      INSTANCE_NAME: vscode-1
+      REPO_BRANCH: ${BRANCH_1:-main}
+    volumes:
+      - vscode-1-workspace:/workspace
+      - vscode-1-config:/root/.config
+      - vscode-1-local:/root/.local
+      - ${HOME}/.ssh:/host-ssh:ro
+      - ${HOME}/.claude:/root/.claude
+      - ./init.sh:/init.sh:ro
+
+  vscode-2:
+    <<: *vscode-base
+    container_name: vscode-dev-2
+    ports:
+      - "8081:8080"
+    environment:
+      <<: *vscode-env
+      INSTANCE_NAME: vscode-2
+      REPO_BRANCH: ${BRANCH_2:-develop}
+    volumes:
+      - vscode-2-workspace:/workspace
+      - vscode-2-config:/root/.config
+      - vscode-2-local:/root/.local
+      - ${HOME}/.ssh:/host-ssh:ro
+      - ${HOME}/.claude:/root/.claude
+      - ./init.sh:/init.sh:ro
+
+  vscode-3:
+    <<: *vscode-base
+    container_name: vscode-dev-3
+    ports:
+      - "8082:8080"
+    environment:
+      <<: *vscode-env
+      INSTANCE_NAME: vscode-3
+      REPO_BRANCH: ${BRANCH_3:-feature/minha-branch}
+    volumes:
+      - vscode-3-workspace:/workspace
+      - vscode-3-config:/root/.config
+      - vscode-3-local:/root/.local
+      - ${HOME}/.ssh:/host-ssh:ro
+      - ${HOME}/.claude:/root/.claude
+      - ./init.sh:/init.sh:ro
+
+volumes:
+  vscode-1-workspace:
+  vscode-1-config:
+  vscode-1-local:
+  vscode-2-workspace:
+  vscode-2-config:
+  vscode-2-local:
+  vscode-3-workspace:
+  vscode-3-config:
+  vscode-3-local:
