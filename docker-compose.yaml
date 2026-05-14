@@ -3,8 +3,10 @@
 #   - Branch própria (BRANCH_1, BRANCH_2, BRANCH_3 no .env)
 #   - Acesso compartilhado às credenciais SSH (~/.ssh do host, read-only)
 #   - Acesso compartilhado ao login do Claude Code (~/.claude do host, leitura/escrita)
+#   - Daemon Docker isolado (sidecar dind-N) — cada instância tem seu próprio docker,
+#     com redes e portas internas independentes, acessado via DOCKER_HOST=tcp://dind-N:2375
 #
-# Portas:
+# Portas (code-server):
 #   vscode-1 → http://localhost:8080
 #   vscode-2 → http://localhost:8081
 #   vscode-3 → http://localhost:8082
@@ -22,7 +24,29 @@ x-vscode-env: &vscode-env
   REPO_URL: ${REPO_URL}
   DEBIAN_FRONTEND: noninteractive
 
+x-dind-base: &dind-base
+  image: docker:dind
+  privileged: true
+  restart: unless-stopped
+  environment:
+    DOCKER_TLS_CERTDIR: ""
+  command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--host=unix:///var/run/docker.sock"]
+  healthcheck:
+    test: ["CMD", "docker", "info"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
 services:
+  # -------- Instância 1 --------
+  dind-1:
+    <<: *dind-base
+    container_name: dind-1
+    volumes:
+      - dind-1-data:/var/lib/docker
+    networks:
+      - vscode-1-net
+
   vscode-1:
     <<: *vscode-base
     container_name: vscode-dev-1
@@ -32,6 +56,7 @@ services:
       <<: *vscode-env
       INSTANCE_NAME: vscode-1
       REPO_BRANCH: ${BRANCH_1:-main}
+      DOCKER_HOST: tcp://dind-1:2375
     volumes:
       - vscode-1-workspace:/workspace
       - vscode-1-config:/root/.config
@@ -39,6 +64,20 @@ services:
       - ${HOME}/.ssh:/host-ssh:ro
       - ${HOME}/.claude:/root/.claude
       - ./init.sh:/init.sh:ro
+    depends_on:
+      dind-1:
+        condition: service_healthy
+    networks:
+      - vscode-1-net
+
+  # -------- Instância 2 --------
+  dind-2:
+    <<: *dind-base
+    container_name: dind-2
+    volumes:
+      - dind-2-data:/var/lib/docker
+    networks:
+      - vscode-2-net
 
   vscode-2:
     <<: *vscode-base
@@ -49,6 +88,7 @@ services:
       <<: *vscode-env
       INSTANCE_NAME: vscode-2
       REPO_BRANCH: ${BRANCH_2:-develop}
+      DOCKER_HOST: tcp://dind-2:2375
     volumes:
       - vscode-2-workspace:/workspace
       - vscode-2-config:/root/.config
@@ -56,6 +96,20 @@ services:
       - ${HOME}/.ssh:/host-ssh:ro
       - ${HOME}/.claude:/root/.claude
       - ./init.sh:/init.sh:ro
+    depends_on:
+      dind-2:
+        condition: service_healthy
+    networks:
+      - vscode-2-net
+
+  # -------- Instância 3 --------
+  dind-3:
+    <<: *dind-base
+    container_name: dind-3
+    volumes:
+      - dind-3-data:/var/lib/docker
+    networks:
+      - vscode-3-net
 
   vscode-3:
     <<: *vscode-base
@@ -66,6 +120,7 @@ services:
       <<: *vscode-env
       INSTANCE_NAME: vscode-3
       REPO_BRANCH: ${BRANCH_3:-feature/minha-branch}
+      DOCKER_HOST: tcp://dind-3:2375
     volumes:
       - vscode-3-workspace:/workspace
       - vscode-3-config:/root/.config
@@ -73,6 +128,11 @@ services:
       - ${HOME}/.ssh:/host-ssh:ro
       - ${HOME}/.claude:/root/.claude
       - ./init.sh:/init.sh:ro
+    depends_on:
+      dind-3:
+        condition: service_healthy
+    networks:
+      - vscode-3-net
 
 volumes:
   vscode-1-workspace:
@@ -84,3 +144,11 @@ volumes:
   vscode-3-workspace:
   vscode-3-config:
   vscode-3-local:
+  dind-1-data:
+  dind-2-data:
+  dind-3-data:
+
+networks:
+  vscode-1-net:
+  vscode-2-net:
+  vscode-3-net:
