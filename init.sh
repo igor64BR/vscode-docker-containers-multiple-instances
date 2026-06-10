@@ -31,7 +31,7 @@ if ! command -v code-server >/dev/null 2>&1; then
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
     > /etc/apt/sources.list.d/docker.list
   apt-get update
-  apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin
+  apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin docker-compose-plugin
 fi
 
 # 2. Copia ~/.ssh do host (montado read-only) para um local gravável dentro do container.
