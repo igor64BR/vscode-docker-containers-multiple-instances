@@ -3,38 +3,7 @@ set -e
 
 REPO_DIR="/workspace/repo"
 
-# 1. Instala dependências apenas se ainda não estiverem presentes
-if ! command -v code-server >/dev/null 2>&1; then
-  echo "==> Instalando dependências (primeira execução do container)..."
-  apt-get update
-  apt-get install -y --no-install-recommends \
-    curl ca-certificates git sudo gnupg \
-    build-essential python3 python3-pip \
-    openssh-client locales
-
-  locale-gen en_US.UTF-8
-
-  # Node.js 20 (necessário para Claude Code)
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
-
-  # code-server
-  curl -fsSL https://code-server.dev/install.sh | sh
-
-  # Claude Code
-  npm install -g @anthropic-ai/claude-code || true
-
-  # Docker CLI + Compose plugin (apontam para o sidecar dind-N via DOCKER_HOST)
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  chmod a+r /etc/apt/keyrings/docker.asc
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update
-  apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin docker-compose-plugin
-fi
-
-# 2. Copia ~/.ssh do host (montado read-only) para um local gravável dentro do container.
+# 1. Copia ~/.ssh do host (montado read-only) para um local gravável dentro do container.
 #    Necessário porque o git precisa atualizar known_hosts e o mount é :ro.
 if [ -d /host-ssh ]; then
   echo "==> Configurando chaves SSH..."
@@ -42,17 +11,16 @@ if [ -d /host-ssh ]; then
   cp -r /host-ssh/. /root/.ssh/ 2>/dev/null || true
   chmod 700 /root/.ssh
   find /root/.ssh -type f -exec chmod 600 {} \;
-  # Garante que github.com está em known_hosts
   ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null || true
   sort -u /root/.ssh/known_hosts -o /root/.ssh/known_hosts 2>/dev/null || true
 fi
 
-# 3. Git config
+# 2. Git config
 git config --global user.name "$GIT_USER_NAME"
 git config --global user.email "$GIT_USER_EMAIL"
 git config --global --add safe.directory "$REPO_DIR"
 
-# 4. Clone do repositório na branch desta instância
+# 3. Clone do repositório na branch desta instância
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo "==> [$INSTANCE_NAME] Clonando $REPO_URL na branch $REPO_BRANCH..."
   if ! git clone --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR"; then
@@ -68,7 +36,7 @@ fi
 echo "==> [$INSTANCE_NAME] Pronto. Branch atual:"
 (cd "$REPO_DIR" && git rev-parse --abbrev-ref HEAD || true)
 
-# 5. Inicia o code-server (binda em 8080 dentro do container; o host mapeia para portas diferentes)
+# 4. Inicia o code-server (binda em 8080 dentro do container; o host mapeia para portas diferentes)
 exec code-server \
   --bind-addr 0.0.0.0:8080 \
   --auth password \

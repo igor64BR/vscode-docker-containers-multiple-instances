@@ -12,7 +12,10 @@
 #   vscode-3 → http://localhost:8082
 
 x-vscode-base: &vscode-base
-  image: ubuntu:24.04
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: vscode-container:latest
   working_dir: /workspace
   command: ["bash", "/init.sh"]
   restart: unless-stopped
